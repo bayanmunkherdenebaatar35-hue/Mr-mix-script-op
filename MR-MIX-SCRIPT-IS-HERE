@@ -1,0 +1,269 @@
+-- La Combinaison Mr. Mix Hub | Delta🤝Solara Compatible
+if getgenv().MrMixHubLoaded then return end
+getgenv().MrMixHubLoaded = true
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local LP = Players.LocalPlayer
+local Character, Root = LP.Character or LP.CharacterAdded:Wait(), nil
+local FlyEnabled, Settings = false, {
+    FlySpeed=60,
+    AntiCatch=true,
+    SafeDistance=6,
+    PushForce=55,
+    Noclip=false,
+    ESPClones=false,
+    ESPWalls=false,
+    AutoSolve=false
+}
+
+-- Character setup
+local function setupCharacter(char)
+    Character = char
+    Root = char:WaitForChild("HumanoidRootPart")
+end
+if LP.Character then setupCharacter(LP.Character) end
+LP.CharacterAdded:Connect(setupCharacter)
+
+-- =========================
+-- Movement & Fly
+-- =========================
+local moveDir = Vector3.new(0,0,0)
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType==Enum.UserInputType.Keyboard then
+        local k=input.KeyCode
+        if k==Enum.KeyCode.W then moveDir=Vector3.new(0,0,-1) end
+        if k==Enum.KeyCode.S then moveDir=Vector3.new(0,0,1) end
+        if k==Enum.KeyCode.A then moveDir=Vector3.new(-1,0,0) end
+        if k==Enum.KeyCode.D then moveDir=Vector3.new(1,0,0) end
+        if k==Enum.KeyCode.Space then moveDir=Vector3.new(0,1,0) end
+        if k==Enum.KeyCode.LeftShift then moveDir=Vector3.new(0,-1,0) end
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    local k=input.KeyCode
+    if k==Enum.KeyCode.W or k==Enum.KeyCode.S or k==Enum.KeyCode.A or k==Enum.KeyCode.D
+    or k==Enum.KeyCode.Space or k==Enum.KeyCode.LeftShift then moveDir=Vector3.new(0,0,0) end
+end)
+
+local BV,BG=Instance.new("BodyVelocity"),Instance.new("BodyGyro")
+BV.MaxForce=Vector3.new(1e9,1e9,1e9)
+BV.Velocity=Vector3.new(0,0,0)
+BV.Parent = LP.Character and LP.Character:WaitForChild("HumanoidRootPart") or nil
+BG.MaxTorque=Vector3.new(1e9,1e9,1e9)
+BG.CFrame = LP.Character and LP.Character:WaitForChild("HumanoidRootPart").CFrame or CFrame.new()
+BG.Parent = LP.Character and LP.Character:WaitForChild("HumanoidRootPart") or nil
+
+-- =========================
+-- Anti-Catch / Mr Mix Push
+-- =========================
+local function getMrMixClones()
+    local clones={}
+    for _, v in ipairs(Workspace:GetChildren()) do
+        if v:IsA("Model") and string.find(v.Name:lower(),"mix") then
+            if v:FindFirstChild("HumanoidRootPart") then table.insert(clones,v) end
+        end
+    end
+    return clones
+end
+
+local function disableTouches()
+    if Character then
+        for _, v in ipairs(Character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanTouch=false
+                if Settings.Noclip then v.CanCollide=false end
+            end
+        end
+    end
+end
+
+-- =========================
+-- ESP
+-- =========================
+local ESPBoxes={}
+local function createESP(model,color)
+    if ESPBoxes[model] then return end
+    local box=Instance.new("BoxHandleAdornment")
+    box.Adornee=model:FindFirstChild("HumanoidRootPart")
+    box.Size=Vector3.new(2,5,2)
+    box.Color3=color
+    box.Transparency=0.5
+    box.AlwaysOnTop=true
+    box.ZIndex=5
+    box.Parent=Workspace
+    ESPBoxes[model]=box
+end
+local function removeESP(model)
+    if ESPBoxes[model] then ESPBoxes[model]:Destroy() ESPBoxes[model]=nil end
+end
+
+-- Invisible walls ESP
+local InvisibleWallESP={}
+local function getInvisibleWalls()
+    local walls={}
+    for _, part in ipairs(Workspace:GetDescendants()) do
+        if part:IsA("BasePart") and part.CanCollide and part.Transparency>=0.95 then
+            table.insert(walls,part)
+        end
+    end
+    return walls
+end
+local function createWallESP(part)
+    if InvisibleWallESP[part] then return end
+    local box=Instance.new("BoxHandleAdornment")
+    box.Adornee=part
+    box.Size=part.Size
+    box.Color3=Color3.fromRGB(0,255,255)
+    box.Transparency=0.4
+    box.AlwaysOnTop=true
+    box.ZIndex=5
+    box.Parent=Workspace
+    InvisibleWallESP[part]=box
+end
+local function removeWallESP(part)
+    if InvisibleWallESP[part] then
+        InvisibleWallESP[part]:Destroy()
+        InvisibleWallESP[part]=nil
+    end
+end
+
+-- =========================
+-- Auto Solve Puzzles
+-- =========================
+local PuzzleSettings={SolveToggle=false}
+local function cutsceneOver()
+    local cs=Workspace:FindFirstChild("Cutscene")
+    return not cs
+end
+local function getSortedPuzzles()
+    local puzzles={}
+    for _, part in ipairs(Workspace:GetDescendants()) do
+        if part:IsA("BasePart") and string.find(part.Name:lower(),"puzzle") then
+            local num=tonumber(part.Name:match("%d+")) or math.huge
+            table.insert(puzzles,{part=part,num=num})
+        end
+    end
+    table.sort(puzzles,function(a,b) return a.num<b.num end)
+    local sorted={}
+    for _,v in ipairs(puzzles) do table.insert(sorted,v.part) end
+    return sorted
+end
+local function solvePuzzle()
+    if not cutsceneOver() then return end
+    for _, puzzle in ipairs(getSortedPuzzles()) do
+        if fireclickdetector then
+            local cd=puzzle:FindFirstChildOfClass("ClickDetector")
+            if cd then fireclickdetector(cd) end
+        end
+    end
+end
+
+-- =========================
+-- Render Loop
+-- =========================
+RunService.RenderStepped:Connect(function()
+    if not Character or not Root then return end
+    disableTouches()
+    
+    -- Fly
+    if Settings.FlyEnabled then
+        BV.Velocity = (Root.CFrame:VectorToWorldSpace(moveDir))*Settings.FlySpeed
+        BG.CFrame=Root.CFrame
+    else
+        BV.Velocity=Vector3.new(0,0,0)
+    end
+    
+    -- Anti-Catch
+    if Settings.AntiCatch then
+        for _, mix in ipairs(getMrMixClones()) do
+            local dist=(Root.Position-mix.HumanoidRootPart.Position).Magnitude
+            if dist<=Settings.SafeDistance then
+                local dir=(Root.Position-mix.HumanoidRootPart.Position).Unit
+                Root.Velocity=dir*Settings.PushForce
+            end
+        end
+    end
+    
+    -- ESP for clones
+    if Settings.ESPClones then
+        for _, mix in ipairs(getMrMixClones()) do createESP(mix,Color3.fromRGB(255,0,0)) end
+    else
+        for _, mix in ipairs(getMrMixClones()) do removeESP(mix) end
+    end
+    
+    -- ESP for invisible walls
+    if Settings.ESPWalls then
+        for _, wall in ipairs(getInvisibleWalls()) do createWallESP(wall) end
+    else
+        for _, wall in ipairs(getInvisibleWalls()) do removeWallESP(wall) end
+    end
+    
+    -- Auto solve puzzles
+    if PuzzleSettings.SolveToggle then solvePuzzle() end
+end)
+
+-- =========================
+-- Rayfield GUI
+-- =========================
+local Rayfield=loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Window=Rayfield:CreateWindow({
+    Name="La Combinaison Mr. Mix Hub",
+    LoadingTitle="Mr. Mix Hub",
+    LoadingSubtitle="Delta🤝Solara Compatible",
+    ConfigurationSaving={Enabled=false}
+})
+
+-- Tabs
+local Main=Window:CreateTab("Main")
+local AutoSolveTab=Window:CreateTab("Auto Solve Puzzles")
+local Tabs={Main,AutoSolveTab}
+
+-- Tab slider for laptops
+Main:CreateSlider({
+    Name="Tab Switcher",
+    Range={1,#Tabs},
+    Increment=1,
+    Suffix="Tab",
+    CurrentValue=1,
+    Callback=function(v)
+        for _, tab in pairs(Tabs) do tab:SetVisible(false) end
+        Tabs[v]:SetVisible(true)
+    end
+})
+
+-- Main toggles/sliders
+Main:CreateToggle({Name="Fly",CurrentValue=false,Callback=function(v) Settings.FlyEnabled=v end})
+Main:CreateSlider({Name="Fly Speed",Range={10,200},Increment=1,Suffix="Studs",CurrentValue=Settings.FlySpeed,Callback=function(v) Settings.FlySpeed=v Settings.FlySpeed=v end})
+Main:CreateToggle({Name="Noclip",CurrentValue=false,Callback=function(v) Settings.Noclip=v end})
+Main:CreateToggle({Name="Anti-Catch",CurrentValue=true,Callback=function(v) Settings.AntiCatch=v end})
+Main:CreateSlider({Name="Safe Distance",Range={1,20},Increment=1,Suffix="Studs",CurrentValue=Settings.SafeDistance,Callback=function(v) Settings.SafeDistance=v end})
+Main:CreateSlider({Name="Push Force",Range={10,100},Increment=1,Suffix="Force",CurrentValue=Settings.PushForce,Callback=function(v) Settings.PushForce=v end})
+Main:CreateToggle({Name="ESP Clones",CurrentValue=false,Callback=function(v) Settings.ESPClones=v end})
+Main:CreateToggle({Name="ESP Invisible Walls",CurrentValue=false,Callback=function(v) Settings.ESPWalls=v end})
+
+-- Delete KillBricks Button
+Main:CreateButton({
+    Name="Delete All KillBricks",
+    Callback=function()
+        for _, part in ipairs(Workspace:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local nameLower=part.Name:lower()
+                if string.find(nameLower,"kill") or string.find(nameLower,"damage") or string.find(nameLower,"brick") then
+                    part:Destroy()
+                end
+            end
+        end
+        print("All KillBricks removed!")
+    end
+})
+
+-- Auto Solve Puzzles Tab
+AutoSolveTab:CreateToggle({
+    Name="Enable Auto Solve",
+    CurrentValue=false,
+    Callback=function(v) PuzzleSettings.SolveToggle=v end
+})
